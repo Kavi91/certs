@@ -23,13 +23,45 @@ data_lock = threading.Lock()
 def extract_and_store_data(message):
     try:
         jsonP = json.loads(message)
+
+        # Function to calculate Z-score
+        def calculate_z_score(value, data):
+            mean = np.mean(data)
+            std = np.std(data)
+            if std == 0:  # Avoid division by zero
+                return 0
+            return (value - mean) / std
+
+        # Detect and handle outliers for temperature
         if 'temperature' in jsonP:
-            temperature_data.append(float(jsonP['temperature']))
+            temp_value = float(jsonP['temperature'])
+            if len(temperature_data) >= 10:  # Ensure sufficient data for calculation
+                temp_z_score = calculate_z_score(temp_value, temperature_data[-10:])
+                print(temp_z_score)
+                if abs(temp_z_score) > 3:  # Outlier detected
+                    print("Outlier detected in temperature:", temp_value)
+                    temp_value = np.median(temperature_data[-10:])  # Replace with median
+                    # Or, skip adding: continue
+                    # Or, replace with the last valid value: temp_value = temperature_data[-1]
+            temperature_data.append(temp_value)
+
+        # Detect and handle outliers for pressure
         if 'pressure' in jsonP:
-            pressure_data.append(float(jsonP['pressure']))
-        print("Data extracted: Temperature and Pressure")  # Debugging print
+            press_value = float(jsonP['pressure'])
+            if len(pressure_data) >= 10:  # Ensure sufficient data for calculation
+                press_z_score = calculate_z_score(press_value, pressure_data[-10:])
+                if abs(press_z_score) > 3:  # Outlier detected
+                    print("Outlier detected in pressure:", press_value)
+                    press_value = np.median(pressure_data[-10:])  # Replace with median
+                    # Or, skip adding: continue
+                    # Or, replace with the last valid value: press_value = pressure_data[-1]
+            pressure_data.append(press_value)
+
+        #print("Data extracted with outlier detection: Temperature and Pressure")
     except Exception as e:
         print("Error in extract_and_store_data:", e)
+
+
 
 def median_filter(data):
     return np.median(data)
@@ -40,9 +72,9 @@ def calculate_average(data):
 def process_temperature_data():
     global combined_data
     while True:
-        if len(temperature_data) >= 5:
-            filtered_value = median_filter(temperature_data[:5])
-            del temperature_data[:5]
+        if len(temperature_data) >= 20:
+            filtered_value = median_filter(temperature_data[:20])
+            del temperature_data[:20]
             with data_lock:
                 combined_data["temperature"] = filtered_value
                 publish_combined_data()
@@ -50,9 +82,9 @@ def process_temperature_data():
 def process_pressure_data():
     global combined_data
     while True:
-        if len(pressure_data) >= 5:
-            filtered_value = median_filter(pressure_data[:5])
-            del pressure_data[:5]
+        if len(pressure_data) >= 20:
+            filtered_value = median_filter(pressure_data[:20])
+            del pressure_data[:20]
             with data_lock:
                 combined_data["pressure"] = filtered_value
                 publish_combined_data()
@@ -82,9 +114,9 @@ class Callback:
         new_string_variable = f"{json_topic}"
 
         if json_topic in topics_to_subscribe:
-            print(f"Received message from subscribed topic: {json_topic}")
+            #print(f"Received message from subscribed topic: {json_topic}")
             topicName = new_string_variable
-            print("Incomming : ",topicName, message)
+            #print("Incomming : ",topicName, message)
             #MQTTClient.publish(topicName, message, qos)
         else:
             print(f"Received message from an unsubscribed topic: {json_topic}")
