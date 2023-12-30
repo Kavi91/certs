@@ -2,37 +2,60 @@ from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 import MQTTSNclient
 import json
 import numpy as np
+import threading
 
-# Global list for storing temperature data
+# Global list for storing temperature and pressure data
 temperature_data = []
 filtered_temperature_data = []
+pressure_data = []
+filtered_pressure_data = []
 
-def extract_and_store_temperature(message):
+def extract_and_store_data(message):
     try:
         jsonP = json.loads(message)
         if 'temperature' in jsonP:
-            # Convert temperature to a float before appending
-            temp_value = float(jsonP['temperature'])
-            temperature_data.append(temp_value)
-    except json.JSONDecodeError:
-        print("Error decoding JSON")
-    except ValueError:
-        print("Invalid temperature value")
-
+            temperature_data.append(float(jsonP['temperature']))
+        if 'pressure' in jsonP:
+            pressure_data.append(float(jsonP['pressure']))
+        print("Data extracted: Temperature and Pressure")  # Debugging print
+    except Exception as e:
+        print("Error in extract_and_store_data:", e)
 
 def median_filter(data):
     return np.median(data)
 
-# Add a function to calculate the average
 def calculate_average(data):
     return sum(data) / len(data) if data else 0
+
+def process_temperature_data():
+    while True:
+        if len(temperature_data) >= 20:
+            filtered_value = median_filter(temperature_data[:20])
+            filtered_temperature_data.append(filtered_value)
+            print("Filtered Temperature Value:", filtered_value)
+            del temperature_data[:20]
+            if len(filtered_temperature_data) % 20 == 0:
+                average_temp = calculate_average(filtered_temperature_data)
+                print("Average Filtered Temperature Value:", average_temp)
+
+def process_pressure_data():
+    while True:
+        if len(pressure_data) >= 20:
+            filtered_value = median_filter(pressure_data[:20])
+            filtered_pressure_data.append(filtered_value)
+            print("Filtered Pressure Value:", filtered_value)
+            del pressure_data[:20]
+            if len(filtered_pressure_data) % 20 == 0:
+                average_press = calculate_average(filtered_pressure_data)
+                print("Average Filtered Pressure:", average_press)
 
 class Callback:
     def messageArrived(self, topicName, payload, qos, retained, msgid):
         message = payload.decode("utf-8")
-        
-        # Extract and store temperature data
-        extract_and_store_temperature(message)
+
+        # Create and start a thread for extracting and storing data
+        data_thread = threading.Thread(target=extract_and_store_data, args=(message,))
+        data_thread.start()
 
         jsonP = json.loads(message)
         json_topic = f"sensor/node{jsonP['node']}"
@@ -48,25 +71,21 @@ class Callback:
 
         return True
 
-# Path that indicates the certificates position
+# Configure the AWS MQTT broker
 path = "/home/root/IoT-Mini-Project-2-Data-Engineering-in-IoT-Pipeline/certs/"
-
-# Configure the access with the AWS MQTT broker
 MQTTClient = AWSIoTMQTTClient("MQTTSNbridge")
 MQTTSNClient = MQTTSNclient.Client("bridge", port=1885)
 
 MQTTClient.configureEndpoint("a5hi9k1blxeai-ats.iot.us-east-1.amazonaws.com", 8883)
-MQTTClient.configureCredentials(path+"AmazonRootCA1.pem",
-                                path+"cb9f87c8d846f3c7aec8b3deee46ee53cb2a7939a1972ff7c812db53ce3cc041-private.pem.key",
+MQTTClient.configureCredentials(path+"AmazonRootCA1.pem", 
+                                path+"cb9f87c8d846f3c7aec8b3deee46ee53cb2a7939a1972ff7c812db53ce3cc041-private.pem.key", 
                                 path+"cb9f87c8d846f3c7aec8b3deee46ee53cb2a7939a1972ff7c812db53ce3cc041-certificate.pem.crt")
 
-# Configure the MQTT broker
-MQTTClient.configureOfflinePublishQueueing(-1)  # Infinite offline Publish queueing
-MQTTClient.configureDrainingFrequency(2)  # Draining: 2 Hz
-MQTTClient.configureConnectDisconnectTimeout(10)  # 10 sec
-MQTTClient.configureMQTTOperationTimeout(5)  # 5 sec
+MQTTClient.configureOfflinePublishQueueing(-1)
+MQTTClient.configureDrainingFrequency(2)
+MQTTClient.configureConnectDisconnectTimeout(10)
+MQTTClient.configureMQTTOperationTimeout(5)
 
-# Register the callback
 MQTTSNClient.registerCallback(Callback())
 
 # Connect to the clients
@@ -75,27 +94,24 @@ MQTTSNClient.connect()
 
 # Define topics for subscription
 topics_to_subscribe = ["sensor/node1", "sensor/node2", "sensor/node3"]
-
-# Subscribe to the topics
 for topic in topics_to_subscribe:
     MQTTSNClient.subscribe(topic)
 
-# Infinite loop to keep the script running
-while True:
-    # Check if there are 20 readings in the list
-    if len(temperature_data) >= 20:
-        # Apply median filter to the temperature data
-        filtered_value = median_filter(temperature_data)
-        filtered_temperature_data.append(filtered_value)
-        print("Filtered Temperature Value:", filtered_value)
+# Start the data processing threads
+temp_thread = threading.Thread(target=process_temperature_data)
+temp_thread.start()
 
-        # Clear the original data list after filtering
-        temperature_data.clear()
-        # Calculate and print the average of the filtered data
-        if len(filtered_temperature_data) % 20 == 0:  # For example, calculate every 20 filtered values
-            average_temp = calculate_average(filtered_temperature_data)
-            print("Average Filtered Temperature Value:", average_temp)
+press_thread = threading.Thread(target=process_pressure_data)
+press_thread.start()
 
-# Disconnect from the clients (this part will not be reached)
+# Keep the main thread alive
+try:
+    while True:
+        pass
+except KeyboardInterrupt:
+    # Handle any cleanup here
+    pass
+
+# Disconnect from the clients
 MQTTSNClient.disconnect()
 MQTTClient.disconnect()
