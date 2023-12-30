@@ -20,3 +20,21 @@ Data Window Size: The window size of 10 for both the Z-score calculation and med
 Data Preprocessing Validation: It's essential to validate the preprocessing steps, especially the outlier handling part, to ensure that it aligns with the actual characteristics of your data and doesn't introduce bias.
 Exploratory Data Analysis: Before finalizing the preprocessing steps, conducting an exploratory data analysis (EDA) on a subset of your data can be very beneficial. It helps in understanding the distribution and characteristics of the data, which can inform the fine-tuning of your preprocessing parameters.
 Overall, your script incorporates critical steps for noise reduction and data preprocessing, making it well-suited for handling and analyzing noisy temperature and pressure data from IoT devices.
+
+
+
+Key Points of the Modification:
+The function process_temperature_data now includes a linear regression model.
+The model is trained on the last 10 temperature readings (this window size can be adjusted based on your requirements).
+The model predicts the next temperature value based on this training.
+The predicted temperature value is then published in the combined data packet.
+Considerations:
+Model Complexity and Window Size: This example uses a basic linear regression model which assumes a linear relationship between the time steps and temperature values. If your data has more complex patterns, you might need a more sophisticated model or a different approach.
+
+Real-Time Training: The model is retrained every time new data is processed. For larger datasets or more complex models, consider the computational cost.
+
+Validation and Testing: Regularly validate your model's performance to ensure it's providing accurate and reliable predictions. Consider setting aside some data for testing the model's predictions.
+
+Error Handling: Add appropriate error handling, especially for cases where the regression model might fail to train or predict due to unexpected data issues.
+
+This modification adds a predictive modeling layer to your data processing pipeline, enhancing the capability to smooth out noise and potentially predict future temperature values. Remember to test and validate the model thoroughly to ensure it meets your specific data analysis needs.
